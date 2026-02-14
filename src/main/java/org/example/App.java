@@ -1,11 +1,9 @@
 package org.example;
 
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public class App {
@@ -19,6 +17,10 @@ public class App {
 
         System.out.println("Удаление файлов сохранений, не лежащих в архиве");
         deleteSavedFiles();
+
+        System.out.println("Распаковка архива и десериализация");
+        openZip();
+
     }
 
     public static void saveGame() {
@@ -66,24 +68,39 @@ public class App {
 
     public static void zipFiles() {
 
-        try (ZipOutputStream zout = new ZipOutputStream(new FileOutputStream("/Users/ekaterina/Games/savegames/zip.zip"));
-             FileInputStream fis = new FileInputStream("/Users/ekaterina/Games/savegames/save.dat")) {
-            ZipEntry entry = new ZipEntry("save.dat");
-            ZipEntry entry1 = new ZipEntry("save1.dat");
-            ZipEntry entry2 = new ZipEntry("save2.dat");
-            zout.putNextEntry(entry);
-            zout.putNextEntry(entry1);
-            zout.putNextEntry(entry2);
-            // считываем содержимое файла в массив byte
-            byte[] buffer = new byte[fis.available()];
-            fis.read(buffer);
-            // добавляем содержимое к архиву
-            zout.write(buffer);
-            // закрываем текущую запись для новой записи
-            zout.closeEntry();
-            System.out.println("Архивация прошла успешно!");
+        String zipPath = "/Users/ekaterina/Games/savegames/zip.zip";
+        String[] files = {
+                "/Users/ekaterina/Games/savegames/save.dat",
+                "/Users/ekaterina/Games/savegames/save1.dat",
+                "/Users/ekaterina/Games/savegames/save2.dat"
+        };
+
+        try (FileOutputStream fos = new FileOutputStream(zipPath);
+             ZipOutputStream zos = new ZipOutputStream(fos)) {
+            byte[] buffer = new byte[1024];
+
+            for (String filePath : files) {
+                File file = new File(filePath);
+
+                if (!file.exists()) {
+                    System.out.println("Файл не найден " + filePath);
+                    continue;
+                }
+                ZipEntry entry = new ZipEntry(file.getName());
+                zos.putNextEntry(entry);
+
+                try (FileInputStream fis = new FileInputStream(file)) {
+                    int length;
+                    while ((length = fis.read(buffer)) > 0) {
+                        zos.write(buffer, 0, length);
+                    }
+                }
+                zos.closeEntry();
+                System.out.println("Добавлен в архив " + file.getName());
+            }
+            System.out.println("Архивация прошла успешно");
         } catch (Exception ex) {
-            System.out.println("Ошибка при архивировании: " + ex.getMessage());
+            System.out.println("Ошибка при архивации " + ex.getMessage());
         }
     }
 
@@ -111,5 +128,62 @@ public class App {
                 System.out.println("Файл уже удалён или не существует: " + file.getName());
             }
         }
+    }
+
+
+    // Распаковка архива
+    public static void openZip() {
+
+        // Путь для распаковки
+        String extractPath = "/Users/ekaterina/Games/savegames/";
+
+        try (ZipInputStream zin = new ZipInputStream(new FileInputStream(extractPath + "zip.zip"))) {
+            ZipEntry entry;
+            while ((entry = zin.getNextEntry()) != null) {
+                String fileName = entry.getName(); // Получаем имя файла из архива
+
+                // Формируем ПОЛНЫЙ путь для распаковки: папка + имя файла
+                String fullPath = extractPath + fileName;
+
+                System.out.println("Распаковываем: " + fileName + " → " + fullPath);
+
+                // Создаём поток для записи в нужную папку
+                FileOutputStream fout = new FileOutputStream(fullPath);
+
+                // Буфер для быстрого чтения/записи (1024 байта)
+                byte[] buffer = new byte[1024];
+                int length;
+                while ((length = zin.read(buffer)) > 0) {
+                    fout.write(buffer, 0, length);
+                }
+
+                fout.close();
+                zin.closeEntry();
+
+                System.out.println("Файл распакован: " + fileName);
+            }
+            System.out.println("Все файлы успешно распакованы в папку: " + extractPath);
+
+        } catch (Exception ex) {
+            System.out.println("Ошибка при распаковке: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+
+
+        // Десериализация
+
+        GameProgress gameProgress = null;
+
+        // откроем входной поток для чтения файла
+        try (FileInputStream fis = new FileInputStream("/Users/ekaterina/Games/savegames/save2.dat");
+             ObjectInputStream ois = new ObjectInputStream(fis)) {
+            // десериализуем объект и скастим его в класс
+            gameProgress = (GameProgress) ois.readObject();
+        } catch (Exception ex) {
+            System.out.println(ex.getMessage());
+        }
+        System.out.println("Состояние сохранненой игры:");
+        System.out.println(gameProgress);
+
     }
 }
